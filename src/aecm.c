@@ -7,7 +7,7 @@
 // AECM ALGORITHMS: One for each set of covariance constraints
 
 double aecm_CCC(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lambda, double *psi_ptr, double *eta, double *alpha,
+                  double *mu, double *lambda, double *psi_ptr, double *eta, double *alpha, int fixed_alpha, int fixed_eta,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations){
     int i, g;
     double bic;
@@ -42,11 +42,11 @@ double aecm_CCC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_CCC(mahal, x, lambda, psi, mu, N, G, p, q);
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -74,20 +74,28 @@ double aecm_CCC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
     }
 
     *iterations=it;
-    params = G-1 + G*p + p*q - q*(q-1)/2 + 1 + 2*G;
+    params = G-1 + G*p + p*q - q*(q-1)/2 + 1;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
+
     bic = 2.0*l[it-1] - params*log(N);
 
     *psi_ptr = psi;
 
-    //free(lambda);
     free(n); free(beta); free(theta); free(sampcovtilde);
-    free(l); free(at); free(pi);
+    free(l); free(at); free(pi); free(zbad); free(correction);
+    free(max_log_dens); free(log_dens);
+    
+    for(g=0; g < G; g++) {
+        free(mahal[g]);
+    }
+    
+    free(mahal);
 
     return bic;
 }
 
 double aecm_CCU(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lambda, double *psi, double *eta, double *alpha,
+                  double *mu, double *lambda, double *psi, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations) {
     int i, g;
     double bic;
@@ -124,10 +132,10 @@ double aecm_CCU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha_numerical(alpha, alpha_min, z, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_mahal_CCU(mahal, x, lambda, psi, mu, N, G, p, q);
         update_zv(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
@@ -157,19 +165,28 @@ double aecm_CCU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
 
     *iterations=it;
 
-    params = G-1 + G*p + p*q - q*(q-1)/2 + p + 2*G;
+    params = G-1 + G*p + p*q - q*(q-1)/2 + p;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
 
     bic = 2.0*l[it-1] - params*log(N);
 
     // Deallocate memory
     free(w);  free(n); free(det); free(beta);
     free(theta); free(sampcovtilde); free(l); free(at); free(pi);
+    free(zbad); free(correction); free(max_log_dens);
+    free(log_dens);
 
+    for(g=0; g < G; g++) {
+        free(mahal[g]);
+    }
+    
+    free(mahal);
+    
     return bic;
 }
 
 double aecm_CUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lambda, double *psi, double *eta, double *alpha,
+                  double *mu, double *lambda, double *psi, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations){
     int i, g;
     double bic;
@@ -211,11 +228,11 @@ double aecm_CUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_CUC(mahal, x, lambda, psi, mu, N, G, p, q);
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv2(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -247,7 +264,8 @@ double aecm_CUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
 
     *iterations = it;
 
-    params = G-1 + G*p+ p*q - q*(q-1)/2 + G + 2*G;
+    params = G-1 + G*p+ p*q - q*(q-1)/2 + G;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
 
     bic = 2.0*l[it-1] - params*log(N);
 
@@ -255,19 +273,22 @@ double aecm_CUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
 
     free(log_dens); free(n); free(log_c); free(max_log_dens);
     free(l); free(at); free(pi); free(log_detpsi);
+    free(zbad); free(correction);
+    
     for(g=0; g < G; g++) {
         free(beta[g]);
         free(theta[g]);
         free(sampcov[g]);
+        free(mahal[g]);
     }
 
-    free(beta); free(theta); free(sampcov);
+    free(beta); free(theta); free(sampcov); free(mahal);
 
     return bic;
 }
 
 double aecm_CUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lambda, double *Psi, double *eta, double *alpha,
+                  double *mu, double *lambda, double *Psi, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations){
 
     int i, j, g;
@@ -319,11 +340,11 @@ double aecm_CUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_CUU(mahal, x, lambda, Psi, mu, N, G, p, q);
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv2(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -367,27 +388,30 @@ double aecm_CUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
 
     *iterations = it;
 
-    params = G-1 + G*p + p*q - q*(q-1)/2 + G*p + 2*G;;
+    params = G-1 + G*p + p*q - q*(q-1)/2 + G*p;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
 
     bic = 2.0*l[it-1] - params*log(N);
 
     /* Deallocate memory */
     free(w); free(n); free(l); free(at); free(pi);
     free(log_detsig); free(log_c); free(log_detpsi); free(Psi0);
-    free(max_log_dens); free(log_dens);
+    free(max_log_dens); free(log_dens); 
+    free(zbad); free(correction);
 
     for(g=0; g < G; g++) {
         free(beta[g]);
         free(theta[g]);
         free(sampcov[g]);
+        free(mahal[g]);
     }
-    free(beta); free(theta); free(sampcov);
-
+    free(beta); free(theta); free(sampcov); free(mahal);
+    
     return bic;
     }
 
 double aecm_UCC(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lam_vec, double *psi_ptr, double *eta, double *alpha,
+                  double *mu, double *lam_vec, double *psi_ptr, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations){
     int i, g;
     double bic;
@@ -434,11 +458,11 @@ double aecm_UCC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_UCC(mahal, x, lambda, psi, mu, N, G, p, q);
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv2(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -469,27 +493,32 @@ double aecm_UCC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
     }
 
     *iterations = it;
-    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + 1 + 2*G;;
+    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + 1;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
+    
     bic = 2.0*l[it-1] - params*log(N);
 
     store_lambda(lam_vec, lambda, G, p, q);
 
     *psi_ptr = psi;
     free(w); free(n); free(l); free(at); free(pi); free(log_detsig); free(log_c);
+    free(zbad); free(correction); free(max_log_dens); free(log_dens);
+    
     for(g=0; g < G; g++) {
         free(beta[g]);
         free(lambda[g]);
         free(theta[g]);
         free(sampcov[g]);
+        free(mahal[g]);
     }
 
-    free(beta); free(lambda); free(theta); free(sampcov);
+    free(beta); free(lambda); free(theta); free(sampcov); free(mahal);
 
     return bic;
 }
 
 double aecm_UCU(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lam_vec, double *psi, double *eta, double *alpha,
+                  double *mu, double *lam_vec, double *psi, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations){
     int i, j=0, g;
     double bic;
@@ -533,11 +562,11 @@ double aecm_UCU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_UCU(mahal, x, lambda, psi, mu, N, G, p, q);
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv2(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -568,25 +597,30 @@ double aecm_UCU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
     }
 
     *iterations = it;
-    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + p + 2*G;;
+    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + p;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
+    
     bic = 2.0*l[it-1] - params*log(N);
 
     store_lambda(lam_vec, lambda, G, p, q);
 
-    free(log_dens); free(n); free(max_log_dens); free(l); free(at); free(pi); free(log_detsig); free(log_c);
+    free(log_dens); free(n); free(max_log_dens); free(l); free(at);
+    free(pi); free(log_detsig); free(log_c); free(zbad); free(correction);
+    
     for(g=0; g < G; g++) {
         free(beta[g]);
         free(lambda[g]);
         free(theta[g]);
         free(sampcov[g]);
+        free(mahal[g]);
     }
-    free(beta); free(lambda); free(theta); free(sampcov);
+    free(beta); free(lambda); free(theta); free(sampcov); free(mahal);
 
     return bic;
 }
 
 double aecm_UUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lam_vec, double *psi, double *eta, double *alpha,
+                  double *mu, double *lam_vec, double *psi, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations) {
     int i, g;
     double bic;
@@ -630,11 +664,11 @@ double aecm_UUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_UUC(mahal, x, lambda, psi, mu, N, G, p, q);
         for(i=0;i<N;i++) for(g=0;g<G;g++) zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv2(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -663,32 +697,37 @@ double aecm_UUC(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
     }
 
     *iterations = it;
-    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + G + 2*G;;
+    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + G;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
+    
     bic = 2.0*l[it-1] - params*log(N);
 
     store_lambda(lam_vec, lambda, G, p, q);
 
     free(log_dens); free(n); free(l); free(at); free(pi);  free(log_detpsi);
-    free(log_detsig); free(log_c);
+    free(log_detsig); free(log_c); free(zbad); free(correction);
+    free(max_log_dens);
+    
     for(g=0; g < G; g++) {
         free(beta[g]);
         free(lambda[g]);
         free(theta[g]);
         free(sampcov[g]);
+        free(mahal[g]);
     }
 
     // memory deallocation
-    free(beta); free(lambda); free(theta); free(sampcov);
+    free(beta); free(lambda); free(theta); free(sampcov); free(mahal);
     return bic;
 }
 
 double aecm_UUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, int p, int G, int N,
-                  double *mu, double *lam_vec, double *Psi, double *eta, double *alpha,
+                  double *mu, double *lam_vec, double *Psi, double *eta, double *alpha, int fixed_eta, int fixed_alpha,
                   double eta_max, double alpha_min, double tol, int max_it, int *iterations) {
 
     int i, j=0, g;
     double bic;
-    int it = 0, stop = 0, paras;
+    int it = 0, stop = 0, params;
 
     double *max_log_dens = malloc(sizeof(double)*N);
     double *log_dens = malloc(sizeof(double)*N*G);
@@ -740,11 +779,11 @@ double aecm_UUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
         update_pi(pi, n, G, N);
         update_correction(correction, v, eta, G, N); // correction is (vig+(1-vig)/eta)
         update_mu(mu, n, x, z, correction, G, N, p);
-        update_alpha(alpha, alpha_min, z, n, v, G, N);
+        update_alpha(alpha, alpha_min, z, n, v, G, N, fixed_alpha);
 
         update_mahal_UUU(mahal, x, lambda, Psi, mu, N, G, p, q);
         for(i=0;i<N;i++) {for(g=0;g<G;g++) {zbad[i*G+g] = z[i*G+g]*(1-v[i*G+g]);}}
-        update_eta(eta, eta_max, zbad, mahal, N, G, p);
+        update_eta(eta, eta_max, zbad, mahal, N, G, p, fixed_eta);
 
         update_zv2(log_dens, x, z, v, pi, max_log_dens, log_c, mahal, eta, alpha, N, G, p, q);
         if (cls_ind) known_z(cls,z,N,G);
@@ -793,8 +832,10 @@ double aecm_UUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
     }
 
     *iterations = it;
-    paras = G-1 + G*p + G*(p*q - q*(q-1)/2) + G*p + 2*G;
-    bic = 2.0*l[it-1] - paras*log(N);
+    params = G-1 + G*p + G*(p*q - q*(q-1)/2) + G*p;
+    params = params + (fixed_alpha ? 1 : G) + (fixed_eta ? 1 : G);
+    
+    bic = 2.0*l[it-1] - params*log(N);
 
     // copy parameter data back out of aecm function
     store_lambda(lam_vec, lambda, G, p, q);
@@ -802,14 +843,16 @@ double aecm_UUU(double *z, double *x, double *v, int cls_ind, int* cls, int q, i
     // memory deallocation
     free(log_dens); free(n); free(log_detpsi); free(l); free(at); free(pi);
     free(log_detsig); free(log_c); free(max_log_dens); free(Psi0);
+    free(zbad); free(correction);
 
     for(g=0; g < G; g++) {
         free(beta[g]);
         free(lambda[g]);
         free(theta[g]);
         free(sampcov[g]);
+        free(mahal[g]);
     }
-    free(beta); free(lambda); free(theta); free(sampcov);
+    free(beta); free(lambda); free(theta); free(sampcov); free(mahal);
     return bic;
 }
 

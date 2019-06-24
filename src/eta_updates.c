@@ -7,44 +7,60 @@
 
 // ETA UPDATES -----------
 
-typedef struct {
-    // struct used to pass extra arguments into optimization function
-    int N;
-    int p;
-    double *mahalanobis;
-    double *zbad;
-} Info_eta;
-
-
-double eta_objective_f(double eta, void *info_ptr) {
-    // objective function that is maximized to produce eta update. From bottom of pg 25 of appendix
-    int i;
-    double output=0;
-
-    Info_eta info = *((Info_eta*)info_ptr);
-    for (i=0;i<info.N;i++) {
-        output += info.zbad[i] * (info.p*log(eta) + info.mahalanobis[i]/eta);
-    }
-    return output;
-}
-
 void update_eta(double *eta, double eta_max, double *zbad, double **mahalanobis,
-                    int N, int G, int p) {
+                int N, int G, int p, int fixed) {
     int i,g;
-    double *zbad0 = malloc(sizeof(double)*N);
-
-    Info_eta info;
-
-    for(g=0; g<G; g++){
-        for(i=0; i<N; i++) {
-            zbad0[i] = zbad[i*G+g];
+    double a, b, e;
+    
+    if (fixed) {
+        a = 0;
+        b = 0;
+        for (g=0; g < G; g++) {
+            for (i = 0; i < N; i++) {
+                a += zbad[i*G+g];
+                b += zbad[i*G+g] * mahalanobis[g][i];
+            }
         }
-        info.N = N; info.p = p; info.mahalanobis = mahalanobis[g]; info.zbad=zbad0;
-        eta[g] = Brent_fmin(1, eta_max, &eta_objective_f, &info, 0.0001220703);
+
+        if (a == 0) {
+            e = 1.01;
+        } else {
+            e = b / (p * a);
+            
+            if (e > eta_max) {
+                e = eta_max;
+            } else if (e < 1) {
+                e = 1;
+            }
+        }
+
+        for (g=0; g < G; g++) {
+            eta[g] = e;
+        }
+        
+        
+    } else {
+        
+        for (g=0; g < G; g++) {
+            a = 0;
+            b = 0;
+            for (i = 0; i < N; i++) {
+                a += zbad[i*G+g];
+                b += zbad[i*G+g] * mahalanobis[g][i];
+            }
+            
+            if (a == 0) {
+                eta[g] = 1.01;
+            } else {
+                eta[g] = b / (p * a);
+            }
+            
+            if (eta[g] > eta_max) {
+                eta[g] = eta_max;
+            }  else if (eta[g] < 1) {
+                eta[g] = 1;
+            }
+        }
+        
     }
-
-    free(zbad0);
 }
-
-
-
